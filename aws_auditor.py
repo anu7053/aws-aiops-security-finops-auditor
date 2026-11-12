@@ -1,22 +1,26 @@
 import os
 import time
 import boto3
+from botocore.config import Config
 from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-# Initialize Gemini client (explicitly using v1beta for Gemini 3 models) and AWS EC2 client
+print("🚀 Initializing Gemini and AWS clients...", flush=True)
+
 ai_client = genai.Client(
     api_key=os.environ["GEMINI_API_KEY"],
-    http_options={"api_version": "v1beta"},
+    http_options=types.HttpOptions(api_version="v1beta", timeout=45_000),
 )
+
 aws_region = os.environ.get("AWS_REGION", "ap-south-1")
-ec2 = boto3.client("ec2", region_name=aws_region)
+boto_config = Config(connect_timeout=10, read_timeout=10, retries={"max_attempts": 2})
+ec2 = boto3.client("ec2", region_name=aws_region, config=boto_config)
 
 # --- REAL AWS BOTO3 DIAGNOSTIC TOOLS ---
 def audit_open_security_groups() -> str:
     """Scans AWS Security Groups for risky 0.0.0.0/0 public inbound access."""
-    print("🛠️ [AWS TOOL] Scanning Security Groups for 0.0.0.0/0 rules...")
+    print("🛠️ [AWS TOOL] Scanning Security Groups for 0.0.0.0/0 rules...", flush=True)
     response = ec2.describe_security_groups()
     risky_rules = []
 
@@ -30,14 +34,16 @@ def audit_open_security_groups() -> str:
                         f"SG: {sg['GroupName']} ({sg['GroupId']}) allows 0.0.0.0/0 on ports {from_port}-{to_port}"
                     )
 
+    print("✅ [AWS TOOL] Security Groups scan complete.", flush=True)
     return "\n".join(risky_rules) if risky_rules else "No 0.0.0.0/0 inbound rules found."
 
 def audit_unattached_ebs_volumes() -> str:
     """Finds unattached EBS volumes ('available' state) wasting monthly AWS spend."""
-    print("🛠️ [AWS TOOL] Scanning for unattached EBS volumes...")
+    print("🛠️ [AWS TOOL] Scanning for unattached EBS volumes...", flush=True)
     response = ec2.describe_volumes(Filters=[{"Name": "status", "Values": ["available"]}])
     volumes = response.get("Volumes", [])
 
+    print("✅ [AWS TOOL] EBS Volumes scan complete.", flush=True)
     if not volumes:
         return "No unattached EBS volumes found. Storage is clean."
 
@@ -49,7 +55,7 @@ def audit_unattached_ebs_volumes() -> str:
 
 def audit_stopped_ec2_instances() -> str:
     """Checks for stopped EC2 instances that may still incur EBS storage charges."""
-    print("🛠️ [AWS TOOL] Scanning for stopped EC2 instances...")
+    print("🛠️ [AWS TOOL] Scanning for stopped EC2 instances...", flush=True)
     response = ec2.describe_instances(Filters=[{"Name": "instance-state-name", "Values": ["stopped"]}])
     stopped = []
 
@@ -57,6 +63,7 @@ def audit_stopped_ec2_instances() -> str:
         for inst in reservation.get("Instances", []):
             stopped.append(f"Instance {inst['InstanceId']} ({inst['InstanceType']}) is stopped.")
 
+    print("✅ [AWS TOOL] EC2 Instances scan complete.", flush=True)
     return "\n".join(stopped) if stopped else "No stopped EC2 instances found."
 
 # --- AUTONOMOUS AWS AUDITOR LOOP ---
@@ -71,27 +78,27 @@ def run_aws_auditor():
     """
 
     tools = [audit_open_security_groups, audit_unattached_ebs_volumes, audit_stopped_ec2_instances]
-    models_to_try = ["gemini-3.8-flash", "gemini-3.8-pro", "gemini-3.1-pro-preview"]
+    models_to_try = ["gemini-3.8-flash", "gemini-3.8-pro"]
 
     for model_name in models_to_try:
         for attempt in range(1, 3):
             try:
-                print(f"🤖 Starting AWS AIOps Auditor using {model_name} (Attempt {attempt})...")
+                print(f"🤖 Starting AWS AIOps Auditor using {model_name} (Attempt {attempt})...", flush=True)
                 response = ai_client.models.generate_content(
                     model=model_name,
                     contents=prompt,
                     config=types.GenerateContentConfig(tools=tools, temperature=0.2),
                 )
-                print("\n" + "="*60)
-                print(f"☁️ LIVE AWS SECURITY & FINOPS AUDIT REPORT ({aws_region})")
-                print("="*60)
-                print(response.text)
+                print("\n" + "="*60, flush=True)
+                print(f"☁️ LIVE AWS SECURITY & FINOPS AUDIT REPORT ({aws_region})", flush=True)
+                print("="*60, flush=True)
+                print(response.text, flush=True)
                 return
-            except APIError as e:
-                print(f"⚠️ Temporary API issue on {model_name}: {e.message}")
-                time.sleep(5)
+            except Exception as e:
+                print(f"⚠️ Issue on {model_name} (Attempt {attempt}): {type(e).__name__}: {e}", flush=True)
+                time.sleep(3)
 
-    raise RuntimeError("All fallback models temporarily unavailable.")
+    raise RuntimeError("All fallback models failed or timed out.")
 
 if __name__ == "__main__":
     run_aws_auditor()
