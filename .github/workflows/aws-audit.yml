@@ -1,0 +1,39 @@
+name: AWS AIOps Security & FinOps Audit
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Runs automatically every Monday at 10:00 AM IST (04:30 UTC)
+    - cron: '30 4 * * 1'
+
+permissions:
+  id-token: write   # Required for GitHub OIDC token generation
+  contents: read
+
+jobs:
+  audit-aws-account:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials via OIDC (Keyless)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: pip install boto3 google-genai
+
+      - name: Run Autonomous AWS Auditor Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          AWS_REGION: ap-south-1
+        run: python aws_auditor.py
