@@ -4,13 +4,12 @@ import boto3
 from botocore.config import Config
 from google import genai
 from google.genai import types
-from google.genai.errors import APIError
 
 print("🚀 Initializing Gemini and AWS clients...", flush=True)
 
 ai_client = genai.Client(
     api_key=os.environ["GEMINI_API_KEY"],
-    http_options=types.HttpOptions(api_version="v1beta", timeout=45_000),
+    http_options=types.HttpOptions(api_version="v1beta", timeout=60_000),
 )
 
 aws_region = os.environ.get("AWS_REGION", "ap-south-1")
@@ -78,27 +77,30 @@ def run_aws_auditor():
     """
 
     tools = [audit_open_security_groups, audit_unattached_ebs_volumes, audit_stopped_ec2_instances]
-    models_to_try = ["gemini-3.8-flash", "gemini-3.8-pro"]
+    models_to_try = ["gemini-3.8-flash", "gemini-3.1-pro-preview"]
 
     for model_name in models_to_try:
-        for attempt in range(1, 3):
+        for attempt in range(1, 4):
             try:
                 print(f"🤖 Starting AWS AIOps Auditor using {model_name} (Attempt {attempt})...", flush=True)
-                response = ai_client.models.generate_content(
+                chat = ai_client.chats.create(
                     model=model_name,
-                    contents=prompt,
                     config=types.GenerateContentConfig(tools=tools, temperature=0.2),
                 )
+                response = chat.send_message(prompt)
+
                 print("\n" + "="*60, flush=True)
                 print(f"☁️ LIVE AWS SECURITY & FINOPS AUDIT REPORT ({aws_region})", flush=True)
                 print("="*60, flush=True)
                 print(response.text, flush=True)
                 return
             except Exception as e:
+                wait_seconds = attempt * 10
                 print(f"⚠️ Issue on {model_name} (Attempt {attempt}): {type(e).__name__}: {e}", flush=True)
-                time.sleep(3)
+                print(f"⏳ Waiting {wait_seconds}s before next attempt...", flush=True)
+                time.sleep(wait_seconds)
 
-    raise RuntimeError("All fallback models failed or timed out.")
+    raise RuntimeError("All fallback models failed or experienced high demand.")
 
 if __name__ == "__main__":
     run_aws_auditor()
