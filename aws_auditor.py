@@ -5,8 +5,11 @@ from google import genai
 from google.genai import types
 from google.genai.errors import APIError
 
-# Initialize Gemini client and AWS EC2 client
-ai_client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
+# Initialize Gemini client (explicitly using v1beta for Gemini 3 models) and AWS EC2 client
+ai_client = genai.Client(
+    api_key=os.environ["GEMINI_API_KEY"],
+    http_options={"api_version": "v1beta"},
+)
 aws_region = os.environ.get("AWS_REGION", "ap-south-1")
 ec2 = boto3.client("ec2", region_name=aws_region)
 
@@ -68,7 +71,7 @@ def run_aws_auditor():
     """
 
     tools = [audit_open_security_groups, audit_unattached_ebs_volumes, audit_stopped_ec2_instances]
-    models_to_try = ["gemini-3.1-pro-preview", "gemini-3.8-pro"]
+    models_to_try = ["gemini-3.8-flash", "gemini-3.8-pro", "gemini-3.1-pro-preview"]
 
     for model_name in models_to_try:
         for attempt in range(1, 3):
