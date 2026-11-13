@@ -79,10 +79,9 @@ def run_aws_auditor():
     tools = [audit_open_security_groups, audit_unattached_ebs_volumes, audit_stopped_ec2_instances]
     MODELS = [
         "gemini-3.8-flash",
-        "gemini-2.5-flash",
-        "gemini-2.5-flash-lite"
+        "gemini-1.5-flash",
+        "gemini-1.5-flash-8b"
 ]
-
     for model_name in MODELS:
         for attempt in range(1, 4):
             try:
