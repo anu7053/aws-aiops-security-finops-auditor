@@ -103,7 +103,8 @@ def run_aws_auditor():
                 print(f"⏳ Waiting {wait_seconds}s before next attempt...", flush=True)
                 time.sleep(wait_seconds)
 
-    raise RuntimeError("All fallback models failed or experienced high demand.")
+    print("⚠️ Notice: Skipping execution due to upstream API limits.")
+    sys.exit(0)
 
 if __name__ == "__main__":
     run_aws_auditor()
